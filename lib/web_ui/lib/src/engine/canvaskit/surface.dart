@@ -151,6 +151,9 @@ class Surface {
       throw CanvasKitError('Cannot create surfaces of empty size.');
     }
 
+    final devicePixelRatioChanged = window.devicePixelRatio != _currentDevicePixelRatio;
+    _currentDevicePixelRatio = window.devicePixelRatio;
+
     // Check if the window is the same size as before, and if so, don't allocate
     // a new canvas as the previous canvas is big enough to fit everything.
     final ui.Size? previousSurfaceSize = _currentSurfaceSize;
@@ -159,13 +162,12 @@ class Surface {
         size.width == previousSurfaceSize.width &&
         size.height == previousSurfaceSize.height) {
       // The existing surface is still reusable.
-      if (window.devicePixelRatio != _currentDevicePixelRatio) {
+      if (devicePixelRatioChanged) {
         _updateLogicalHtmlCanvasSize();
+        _translateCanvas();
       }
       return _surface!;
     }
-
-    _currentDevicePixelRatio = window.devicePixelRatio;
 
     // If the current canvas size is smaller than the requested size then create
     // a new, larger, canvas. Then update the GR context so we can create a new
@@ -188,6 +190,8 @@ class Surface {
 
       _createNewCanvas(newSize);
       _currentCanvasPhysicalSize = newSize;
+    } else if (devicePixelRatioChanged) {
+      _updateLogicalHtmlCanvasSize();
     }
 
     _currentSurfaceSize = size;
