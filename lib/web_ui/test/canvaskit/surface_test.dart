@@ -73,7 +73,8 @@ void testMain() {
       expect(secondIncreaseSurface.height(), 22);
 
       // Increases beyond the 40% limit will cause a new allocation.
-      final CkSurface hugeSurface = surface.acquireFrame(const ui.Size(20, 40)).skiaSurface;
+      final CkSurface hugeSurface =
+          surface.acquireFrame(const ui.Size(20, 40)).skiaSurface;
       final html.CanvasElement huge = surface.htmlCanvas!;
       expect(huge, isNot(same(secondIncrease)));
       expect(hugeSurface, isNot(same(secondIncreaseSurface)));
@@ -100,6 +101,46 @@ void testMain() {
       // TODO(hterkelsen): See if we can give a custom size for software
       //     surfaces.
     }, skip: isFirefox || isIosSafari);
+
+    // Regression test for https://github.com/flutter/flutter/issues/77084.
+    test('translates oversized canvases to align content with viewport', () {
+      final Surface surface = Surface();
+      final CkSurface original =
+          surface.acquireFrame(const ui.Size(16, 16)).skiaSurface;
+      expect(original.width(), 16);
+      expect(original.height(), 16);
+
+      final int originalCanvasWidth = surface.htmlCanvas!.width!;
+      final int originalCanvasHeight = surface.htmlCanvas!.height!;
+
+      final CkSurface shrunk =
+          surface.acquireFrame(const ui.Size(16, 10)).skiaSurface;
+      expect(shrunk.width(), 16);
+      expect(shrunk.height(), 10);
+      expect(surface.htmlCanvas!.style.width, '${originalCanvasWidth}px');
+      expect(surface.htmlCanvas!.style.height, '${originalCanvasHeight}px');
+      expect(surface.htmlCanvas!.width!, originalCanvasWidth);
+      expect(surface.htmlCanvas!.height, originalCanvasHeight);
+      final int verticalCanvasTranslation =
+          shrunk.height() - originalCanvasHeight;
+      expect(surface.htmlCanvas!.style.transform,
+          matches('translate(.*, ${verticalCanvasTranslation}px)'));
+
+      // A device-pixel-ratio change (without a surface resize) results in
+      // a changed logical canvas height and thus must update the canvas
+      // translation.
+      window.debugOverrideDevicePixelRatio(0.5);
+      final CkSurface lowDpr =
+          surface.acquireFrame(const ui.Size(16, 10)).skiaSurface;
+      expect(lowDpr, shrunk);
+      expect(surface.htmlCanvas!.style.width, '${originalCanvasWidth / 0.5}px');
+      expect(
+          surface.htmlCanvas!.style.height, '${originalCanvasHeight / 0.5}px');
+      expect(surface.htmlCanvas!.width!, originalCanvasWidth);
+      expect(surface.htmlCanvas!.height, originalCanvasHeight);
+      expect(surface.htmlCanvas!.style.transform,
+          matches('translate(.*, ${verticalCanvasTranslation / 0.5}px)'));
+    });
 
     test(
       'Surface creates new context when WebGL context is restored',
@@ -178,6 +219,19 @@ void testMain() {
       expect(lowDpr.height(), 16);
       expect(surface.htmlCanvas!.style.width, '20px');
       expect(surface.htmlCanvas!.style.height, '32px');
+
+      // A surface size change together with a device-pixel-ratio change, that
+      // does not trigger a canvas reallocation, must update the logical canvas
+      // size. Regression test for
+      //   https://github.com/flutter/flutter/issues/77084,
+      //   https://github.com/flutter/flutter/issues/77605.
+      window.debugOverrideDevicePixelRatio(1.0);
+      final CkSurface smaller =
+          surface.acquireFrame(const ui.Size(8, 14)).skiaSurface;
+      expect(smaller.width(), 8);
+      expect(smaller.height(), 14);
+      expect(surface.htmlCanvas!.style.width, '10px');
+      expect(surface.htmlCanvas!.style.height, '16px');
     });
   }, skip: isIosSafari);
 }
